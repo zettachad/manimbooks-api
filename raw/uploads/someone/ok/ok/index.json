@@ -1,0 +1,11 @@
+{
+    "author": "someone",
+    "title": "ok",
+    "chapters": [
+        {
+            "name": "1. Credits",
+            "slides": "1. Credits.slides.html",
+            "md": "1. Credits.html"
+        }
+    ]
+}
