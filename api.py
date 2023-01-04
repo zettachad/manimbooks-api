@@ -270,6 +270,10 @@ def get_books():
 def get_status():
     book_title = request.args.get('book_title')
     author = request.args.get('author')
+    if not book_title or not author:
+        resp = jsonify({'message': 'Incomplete request'})
+        resp.status_code = 400
+        return resp
     query = "SELECT * FROM books WHERE books.bookName = '" + \
         book_title + "' AND books.author = '" + author + "'"
     items = list(container.query_items(
