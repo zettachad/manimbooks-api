@@ -254,7 +254,7 @@ def new_book():
         target=convert, args=(book_title, author, cover_name))
     convert_thread.start()
     logging.info(f"Started conversion thread for {book_title} by {author}")
-    return redirect(f'https://manimbooks.kush.in/${author}/${book_title}')
+    return redirect(f'https://manimbooks.kush.in/{author}/{book_title}')
 
 
 @ app.route('/get_books', methods=['GET'])
