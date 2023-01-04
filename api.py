@@ -7,20 +7,21 @@ import shutil
 import tarfile
 import nbformat
 import threading
+import logging
 from pathlib import Path
 from traitlets.config import Config
 from nbconvert.writers import FilesWriter
-from nbconvert import SlidesExporter, MarkdownExporter
-from nbconvert.preprocessors import ExecutePreprocessor, CellExecutionError
-
-from azure.cosmos import exceptions, CosmosClient, PartitionKey
 from werkzeug.utils import secure_filename
 from flask import Flask, request, jsonify, redirect
+from nbconvert import SlidesExporter, MarkdownExporter
+from nbconvert.preprocessors import ExecutePreprocessor, CellExecutionError
+from azure.cosmos import exceptions, CosmosClient, PartitionKey
 
 
 HOME_DIR = os.path.dirname(os.path.realpath(__file__))
 UPLOAD_FOLDER = HOME_DIR + '/books/uploads'
-
+logging.basicConfig(filename='api.log',
+                    encoding='utf-8', level=logging.DEBUG)
 
 endpoint = os.environ["COSMOS_ENDPOINT"]
 key = os.environ["COSMOS_KEY"]
@@ -129,8 +130,10 @@ def convert(book, author, cover_name):
         nb = nbformat.read(notebook['path'], nbformat.NO_CONVERT)
         try:
             ep.preprocess(nb)
-        except CellExecutionError:
+        except CellExecutionError as e:
             changestatus(book, author, "Error in " + notebook['name'])
+            logging.error(
+                "Error in " + notebook['name'] + e.from_cell_and_msg(), exc_info=True)
             return False
 
         # convert the notebook to slides
@@ -175,11 +178,9 @@ def convert(book, author, cover_name):
     shutil.move(f"{book}.mbook", folder)
     file = tarfile.open(f"{folder}/{book}.mbook")
     file.extractall(folder)
-    print("Done")
-
     shutil.rmtree(f"./.cache/{book}")
-    print("Done")
     changestatus(book, author, "Completed")
+    logging.info("Completed " + book + " by " + author)
 
 
 @ app.route('/new_book', methods=['POST'])
@@ -247,9 +248,12 @@ def new_book():
         'status': 'Converting'
     }
     container.upsert_item(book)
+    logging.info(
+        f"Book {book_title} by {author} added to database. ID: {book['id']}")
     convert_thread = threading.Thread(
         target=convert, args=(book_title, author, cover_name))
     convert_thread.start()
+    logging.info(f"Started conversion thread for {book_title} by {author}")
     return redirect(f'https://manimbooks.kush.in/${author}/${book_title}')
 
 
