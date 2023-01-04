@@ -11,7 +11,7 @@ from pathlib import Path
 from traitlets.config import Config
 from nbconvert.writers import FilesWriter
 from nbconvert import SlidesExporter, MarkdownExporter
-from nbconvert.preprocessors import ExecutePreprocessor
+from nbconvert.preprocessors import ExecutePreprocessor, CellExecutionError
 
 from azure.cosmos import exceptions, CosmosClient, PartitionKey
 from werkzeug.utils import secure_filename
@@ -69,7 +69,7 @@ def changestatus(book, author, status):
     return True
 
 
-def convert(book, author):
+def convert(book, author, cover_name):
 
     folder = HOME_DIR + "/books/uploads/" + author + '/' + book
     script_dir = HOME_DIR + "/convert"
@@ -118,30 +118,29 @@ def convert(book, author):
             continue
         dct = {}
         os.chdir(c.FilesWriter.build_directory)
-        print("Converting ", notebook['name'])
+        changestatus(book, author, "Converting " + notebook['name'])
         shutil.copy2(notebook['path'], c.FilesWriter.build_directory)
         filename = format_name(str(notebook['name']).replace(".ipynb", ""), i)
         dct['name'] = filename
         i += 1
 
         # execute (render) the contents of the notebook
-        print("Executing contents of notebook...", end="    ")
-        ep = ExecutePreprocessor(timeout=600)
+        ep = ExecutePreprocessor(timeout=1800)
         nb = nbformat.read(notebook['path'], nbformat.NO_CONVERT)
-        ep.preprocess(nb)
-        print("Done")
+        try:
+            ep.preprocess(nb)
+        except CellExecutionError:
+            changestatus(book, author, "Error in " + notebook['name'])
+            return False
 
         # convert the notebook to slides
-        print("Converting to slides...", end="    ")
         slides = SlidesExporter(config=c, template_name="reveal.js")
         (output, resources) = slides.from_notebook_node(nb)
         fw = FilesWriter(config=c)
         fw.write(output, resources, notebook_name=filename)
         dct['slides'] = filename + ".slides.html"
-        print("Done")
 
         # convert the notebook to markdown, copy it to texme html template
-        print("Converting to markdown...", end="    ")
         shutil.copy2(f"{script_dir}/templates/scroll.html",
                      f"{filename}.html")
         scroll = MarkdownExporter(config=c)
@@ -152,14 +151,14 @@ def convert(book, author):
             g.write(f.read())
             os.remove(f"{filename}.md")
         dct['md'] = filename + ".html"
-        print("Done")
         chapters.append(dct)
 
     # create index.json file
     index = {
         "author": author,
         "title": book,
-        "chapters": chapters
+        "chapters": chapters,
+        "cover": cover_name
     }
     open("index.json", "w").write(json.dumps(index, indent=4))
 
@@ -171,14 +170,13 @@ def convert(book, author):
             tar.add(source_dir, arcname=os.path.basename(source_dir))
         tar.close()
 
-    print("Creating tarball...", end="    ")
+    changestatus(book, author, "Creating book")
     make_tarfile(f"{book}.mbook", f"./.cache/{book}")
     shutil.move(f"{book}.mbook", folder)
     file = tarfile.open(f"{folder}/{book}.mbook")
     file.extractall(folder)
     print("Done")
 
-    print("Cleaning up...", end="    ")
     shutil.rmtree(f"./.cache/{book}")
     print("Done")
     changestatus(book, author, "Completed")
@@ -188,6 +186,7 @@ def convert(book, author):
 def new_book():
     book_title = request.form.get('book_title')
     author = request.form.get('author')
+    cover_name = None
     if not book_title or not author:
         resp = jsonify({'message': 'Incomplete form'})
         resp.status_code = 400
@@ -214,8 +213,8 @@ def new_book():
                 filename = secure_filename(cover.filename)
                 if not os.path.exists(book_dir):
                     os.makedirs(book_dir)
-                cover.save(os.path.join(book_dir, "cover." +
-                           filename.rsplit('.', 1)[1].lower()))
+                cover_name = "cover." + filename.rsplit('.', 1)[1].lower()
+                cover.save(os.path.join(book_dir, cover_name))
             else:
                 resp = jsonify(
                     {'message': 'Allowed file types are txt, png, jpg, jpeg, webp'})
@@ -244,12 +243,12 @@ def new_book():
         'bookName': book_title,
         'author': author,
         'timestamp': datetime.datetime.utcnow().isoformat(),
-        'cover': 'cover.' + filename.rsplit('.', 1)[1].lower(),
-        'status': 'converting'
+        'cover': cover_name,
+        'status': 'Converting'
     }
     container.upsert_item(book)
     convert_thread = threading.Thread(
-        target=convert, args=(book_title, author))
+        target=convert, args=(book_title, author, cover_name))
     convert_thread.start()
     return redirect(f'https://manimbooks.kush.in/${author}/${book_title}')
 
