@@ -15,10 +15,12 @@ from nbconvert.preprocessors import ExecutePreprocessor
 
 from azure.cosmos import exceptions, CosmosClient, PartitionKey
 from werkzeug.utils import secure_filename
-from flask import Flask, request, jsonify
-from flask import Flask
+from flask import Flask, request, jsonify, redirect
 
-UPLOAD_FOLDER = '/home/azureuser/api/raw/uploads'
+
+HOME_DIR = os.path.dirname(os.path.realpath(__file__))
+UPLOAD_FOLDER = HOME_DIR + '/books/uploads'
+
 
 endpoint = os.environ["COSMOS_ENDPOINT"]
 key = os.environ["COSMOS_KEY"]
@@ -33,8 +35,8 @@ except exceptions.CosmosResourceExistsError:
     container = database.get_container_client(container_name)
 
 
-app = Flask(__name__, static_url_path='/raw',
-            static_folder='/home/azureuser/api/raw')
+app = Flask(__name__, static_url_path='/books',
+            static_folder=HOME_DIR + '/books')
 app.secret_key = "secret key"
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
@@ -52,10 +54,25 @@ def allowed_chapter_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in CHAPTER_ALLOWED_EXTENSIONS
 
 
+def changestatus(book, author, status):
+    query = "SELECT * FROM c WHERE c.bookName = '" + \
+        book + "' AND c.author = '" + author + "'"
+    items = list(container.query_items(
+        query=query,
+        enable_cross_partition_query=True
+    ))
+    if len(items) == 0:
+        return False
+    item = items[0]
+    item['status'] = status
+    container.upsert_item(item)
+    return True
+
+
 def convert(book, author):
 
-    folder = "/home/azureuser/api/raw/uploads/" + author + '/' + book
-    script_dir = "/home/azureuser/api/convert"
+    folder = HOME_DIR + "/books/uploads/" + author + '/' + book
+    script_dir = HOME_DIR + "/convert"
 
     def get_path(s):
         return str(Path(s).expanduser().absolute().resolve())
@@ -164,9 +181,10 @@ def convert(book, author):
     print("Cleaning up...", end="    ")
     shutil.rmtree(f"./.cache/{book}")
     print("Done")
+    changestatus(book, author, "Completed")
 
 
-@app.route('/new_book', methods=['POST'])
+@ app.route('/new_book', methods=['POST'])
 def new_book():
     book_title = request.form.get('book_title')
     author = request.form.get('author')
@@ -233,14 +251,27 @@ def new_book():
     convert_thread = threading.Thread(
         target=convert, args=(book_title, author))
     convert_thread.start()
-    resp = jsonify({'message': 'Book successfully uploaded'})
-    resp.status_code = 201
+    return redirect(f'https://manimbooks.kush.in/${author}/${book_title}')
+
+
+@ app.route('/get_books', methods=['GET'])
+def get_books():
+    query = "SELECT * FROM books ORDER BY books.timestamp DESC OFFSET 0 LIMIT 100"
+    items = list(container.query_items(
+        query=query,
+        enable_cross_partition_query=True
+    ))
+    resp = jsonify(items)
+    resp.status_code = 200
     return resp
 
 
-@app.route('/get_books', methods=['GET'])
-def get_books():
-    query = "SELECT * FROM books ORDER BY books.timestamp DESC OFFSET 0 LIMIT 100"
+@ app.route('/get_status', methods=['GET'])
+def get_status():
+    book_title = request.args.get('book_title')
+    author = request.args.get('author')
+    query = "SELECT * FROM books WHERE books.bookName = '" + \
+        book_title + "' AND books.author = '" + author + "'"
     items = list(container.query_items(
         query=query,
         enable_cross_partition_query=True
