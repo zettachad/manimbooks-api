@@ -280,6 +280,10 @@ def get_status():
         query=query,
         enable_cross_partition_query=True
     ))
+    if len(items) == 0:
+        resp = jsonify({'message': 'Book does not exist'})
+        resp.status_code = 400
+        return resp
     resp = jsonify(items)
     resp.status_code = 200
     return resp
