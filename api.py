@@ -20,8 +20,10 @@ from azure.cosmos import exceptions, CosmosClient, PartitionKey
 
 HOME_DIR = os.path.dirname(os.path.realpath(__file__))
 UPLOAD_FOLDER = HOME_DIR + '/books/uploads'
-logging.basicConfig(filename='api.log',
-                    encoding='utf-8', level=logging.DEBUG)
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.DEBUG)
+handler = logging.FileHandler('api.log', 'w', 'utf-8')
+root_logger.addHandler(handler)
 
 endpoint = os.environ["COSMOS_ENDPOINT"]
 key = os.environ["COSMOS_KEY"]
@@ -132,7 +134,7 @@ def convert(book, author, cover_name):
             ep.preprocess(nb)
         except CellExecutionError as e:
             changestatus(book, author, "Error in " + notebook['name'])
-            logging.error(
+            root_logger.error(
                 "Error in " + notebook['name'] + e.from_cell_and_msg(), exc_info=True)
             return False
 
@@ -180,7 +182,7 @@ def convert(book, author, cover_name):
     file.extractall(folder)
     shutil.rmtree(f"./.cache/{book}")
     changestatus(book, author, "Completed")
-    logging.info("Completed " + book + " by " + author)
+    root_logger.info("Completed " + book + " by " + author)
 
 
 @ app.route('/new_book', methods=['POST'])
@@ -248,12 +250,12 @@ def new_book():
         'status': 'Converting'
     }
     container.upsert_item(book)
-    logging.info(
+    root_logger.info(
         f"Book {book_title} by {author} added to database. ID: {book['id']}")
     convert_thread = threading.Thread(
         target=convert, args=(book_title, author, cover_name))
     convert_thread.start()
-    logging.info(f"Started conversion thread for {book_title} by {author}")
+    root_logger.info(f"Started conversion thread for {book_title} by {author}")
     return redirect(f'https://manimbooks.kush.in/{author}/{book_title}')
 
 
