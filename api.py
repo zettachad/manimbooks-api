@@ -135,7 +135,7 @@ def convert(book, author, cover_name):
         except CellExecutionError as e:
             changestatus(book, author, "Error in " + notebook['name'])
             root_logger.error(
-                "Error in " + notebook['name'] + e.from_cell_and_msg(), exc_info=True)
+                "Error in " + notebook['name'] + e, exc_info=True)
             return False
 
         # convert the notebook to slides
