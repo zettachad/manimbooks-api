@@ -49,7 +49,7 @@ idna==2.8
 importlib-metadata==5.2.0
 incremental==16.10.1
 ipykernel==6.19.4
-ipython==8.7.0
+ipython==8.10.0
 isosurfaces==0.1.0
 itsdangerous==2.1.2
 jedi==0.18.2
