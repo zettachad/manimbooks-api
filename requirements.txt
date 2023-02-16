@@ -166,7 +166,7 @@ WALinuxAgent==2.2.46
 watchdog==2.2.0
 wcwidth==0.2.5
 webencodings==0.5.1
-Werkzeug==2.2.2
+Werkzeug==2.2.3
 wheel==0.34.2
 yarg==0.1.9
 zipp==1.0.0
